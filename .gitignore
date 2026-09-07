@@ -1,0 +1,10 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.Python
+*.log
+deploy_vps.py
+users.json
+users.tmp
