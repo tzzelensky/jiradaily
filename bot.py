@@ -116,11 +116,21 @@ def next_weekday_at(now: datetime, hour: int, minute: int) -> datetime:
 
 
 def next_scheduled_run(now: datetime) -> datetime:
-    return next_weekday_at(now, 11, 30)
+    cfg = store.get_schedule_config()
+    try:
+        h, m = [int(x) for x in cfg.get("personal_time", "11:30").split(":")[:2]]
+    except Exception:
+        h, m = 11, 30
+    return next_weekday_at(now, h, m)
 
 
 def next_team_scheduled_run(now: datetime) -> datetime:
-    return next_weekday_at(now, 12, 0)
+    cfg = store.get_schedule_config()
+    try:
+        h, m = [int(x) for x in cfg.get("team_time", "12:00").split(":")[:2]]
+    except Exception:
+        h, m = 12, 0
+    return next_weekday_at(now, h, m)
 
 
 def send_personal_auto_reports() -> None:
@@ -169,7 +179,7 @@ def send_team_auto_reports() -> None:
 
 
 def scheduler_loop(stop: threading.Event) -> None:
-    log.info("Планировщик: Пн–Пт 11:30 (личный) и 12:00 (команды) ЕКБ")
+    log.info("Планировщик запущен (динамическое время из WebApp)")
     last_personal: date | None = None
     last_team: date | None = None
     while not stop.is_set():
@@ -188,11 +198,21 @@ def scheduler_loop(stop: threading.Event) -> None:
         now = datetime.now(TZ)
         if now.weekday() >= 5:
             continue
-        p_start = now.replace(hour=11, minute=30, second=0, microsecond=0)
+        cfg = store.get_schedule_config()
+        try:
+            ph, pm = [int(x) for x in cfg.get("personal_time", "11:30").split(":")[:2]]
+        except Exception:
+            ph, pm = 11, 30
+        try:
+            th, tm = [int(x) for x in cfg.get("team_time", "12:00").split(":")[:2]]
+        except Exception:
+            th, tm = 12, 0
+
+        p_start = now.replace(hour=ph, minute=pm, second=0, microsecond=0)
         if p_start <= now < p_start + timedelta(minutes=2) and last_personal != now.date():
             send_personal_auto_reports()
             last_personal = now.date()
-        t_start = now.replace(hour=12, minute=0, second=0, microsecond=0)
+        t_start = now.replace(hour=th, minute=tm, second=0, microsecond=0)
         if t_start <= now < t_start + timedelta(minutes=2) and last_team != now.date():
             send_team_auto_reports()
             last_team = now.date()
@@ -975,6 +995,14 @@ def handle_message(msg: dict) -> None:
     if cmd == "/notify":
         handle_notify(chat_id, args)
         return
+    if cmd == "/webapp":
+        reply_markup(
+            chat_id,
+            "🚀 <b>Панель управления Jira Daily Report</b>\n\n"
+            "Выбор времени (барабан револьвера), отчеты, команды и токены:",
+            [[{"text": "⚡ Открыть WebApp", "web_app": {"url": "https://jirasumbot.duckdns.org"}}]],
+        )
+        return
     if cmd == "/changename":
         if not (user and user.get("authorized")) and not store.is_admin(chat_id):
             return
@@ -1110,6 +1138,7 @@ def _cmd(command: str, description: str) -> dict:
 
 BASE_BOT_COMMANDS = [
     _cmd("start", "Статус / начать привязку"),
+    _cmd("webapp", "📱 Открыть WebApp админку"),
     _cmd("help", "Список команд"),
     _cmd("sum", "Личный отчёт (today/yesterday/дата)"),
     _cmd("sum_user", "Отчёт по любому Jira-пользователю"),
@@ -1134,7 +1163,20 @@ ADMIN_BOT_COMMANDS = [
 
 
 def register_bot_commands() -> None:
-    """Меню команд при нажатии / в чате с ботом."""
+    """Меню команд при нажатии / в чате с ботом и WebApp-кнопка меню."""
+    try:
+        tg_api(
+            "setChatMenuButton",
+            menu_button={
+                "type": "web_app",
+                "text": "📱 WebApp",
+                "web_app": {"url": "https://jirasumbot.duckdns.org"},
+            },
+        )
+        log.info("Chat menu button установлен на https://jirasumbot.duckdns.org")
+    except Exception:
+        log.exception("setChatMenuButton failed")
+
     tg_api("setMyCommands", commands=BASE_BOT_COMMANDS)
     # персональные меню по чатам
     for chat_id, user in store.load().get("users", {}).items():
@@ -1210,6 +1252,15 @@ def main() -> None:
     except Exception:
         log.exception("startup notification")
     stop = threading.Event()
+    try:
+        import api_server
+
+        api_srv = api_server.run_api_server(host="0.0.0.0", port=8085)
+        threading.Thread(target=api_srv.serve_forever, daemon=True).start()
+        log.info("API сервер WebApp запущен на 0.0.0.0:8085")
+    except Exception:
+        log.exception("Не удалось запустить API сервер WebApp")
+
     threading.Thread(target=scheduler_loop, args=(stop,), daemon=True).start()
     try:
         poll_loop(stop)

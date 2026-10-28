@@ -283,7 +283,10 @@ def fetch_comments_for_day(day: date, account_id: str) -> list[IssueRow]:
 
     rows: list[IssueRow] = []
     seen: set[tuple[str, str]] = set()
-    for issue in candidates[:80]:
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _check_issue(issue: dict[str, Any]) -> list[tuple[str, str, str, str, str]]:
         key = issue.get("key") or "?"
         fields = issue.get("fields") or {}
         summary = (fields.get("summary") or "").strip()
@@ -291,7 +294,8 @@ def fetch_comments_for_day(day: date, account_id: str) -> list[IssueRow]:
         try:
             comments = list_issue_comments(key)
         except Exception:
-            continue
+            return []
+        found = []
         for c in comments:
             author = c.get("author") or {}
             if author.get("accountId") != account_id:
@@ -305,19 +309,26 @@ def fetch_comments_for_day(day: date, account_id: str) -> list[IssueRow]:
             text = _adf_or_text_to_plain(c.get("body"))
             if len(text) > 280:
                 text = text[:277] + "…"
-            marker = (key, c.get("id") or text)
-            if marker in seen:
-                continue
-            seen.add(marker)
-            rows.append(
-                IssueRow(
-                    key=key,
-                    summary=summary,
-                    status=status,
-                    url=f"{JIRA_BASE}/browse/{key}",
-                    comment_text=text or "(без текста)",
+            found.append((key, str(c.get("id") or text), summary, status, text or "(без текста)"))
+        return found
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        for res_list in executor.map(_check_issue, candidates[:80]):
+            for item in res_list:
+                key, cid, summary, status, text = item
+                marker = (key, cid)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                rows.append(
+                    IssueRow(
+                        key=key,
+                        summary=summary,
+                        status=status,
+                        url=f"{JIRA_BASE}/browse/{key}",
+                        comment_text=text,
+                    )
                 )
-            )
     return rows
 
 

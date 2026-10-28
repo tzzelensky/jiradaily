@@ -18,7 +18,15 @@ ADMIN_CHAT_ID = "404740026"
 
 
 def _empty() -> dict[str, Any]:
-    return {"invites": {}, "users": {}, "teams": {}}
+    return {
+        "invites": {},
+        "users": {},
+        "teams": {},
+        "settings": {
+            "personal_schedule_time": "11:30",
+            "team_schedule_time": "12:00",
+        },
+    }
 
 
 def load() -> dict[str, Any]:
@@ -31,6 +39,13 @@ def load() -> dict[str, Any]:
     data.setdefault("invites", {})
     data.setdefault("users", {})
     data.setdefault("teams", {})
+    data.setdefault(
+        "settings",
+        {
+            "personal_schedule_time": "11:30",
+            "team_schedule_time": "12:00",
+        },
+    )
     return data
 
 
@@ -292,6 +307,25 @@ def add_team_member(
         return True, "Добавлен", team
 
 
+def remove_team_member(
+    team_id: str,
+    jira_account_id: str,
+) -> tuple[bool, str, dict[str, Any] | None]:
+    """Удалить Jira-участника из команды. Возвращает (ok, message, team)."""
+    with _LOCK:
+        data = load()
+        team = data.get("teams", {}).get(str(team_id))
+        if not team:
+            return False, "Команда не найдена.", None
+        members = team.setdefault("members", [])
+        before_count = len(members)
+        team["members"] = [m for m in members if m.get("jira_account_id") != jira_account_id]
+        if len(team["members"]) == before_count:
+            return False, "Участник не найден в команде.", team
+        save(data)
+        return True, "Удалён", team
+
+
 def format_team_members(team: dict[str, Any]) -> str:
     members = team.get("members") or []
     if not members:
@@ -377,3 +411,72 @@ def get_pending_sum_user(chat_id: str) -> dict[str, Any] | None:
     if not u:
         return None
     return u.get("pending_sum_user")
+
+
+def get_schedule_config() -> dict[str, str]:
+    with _LOCK:
+        data = load()
+        settings = data.get("settings", {})
+        return {
+            "personal_time": settings.get("personal_schedule_time", "11:30"),
+            "team_time": settings.get("team_schedule_time", "12:00"),
+            "timezone": "Asia/Yekaterinburg",
+        }
+
+
+def set_schedule_config(personal_time: str, team_time: str) -> dict[str, str]:
+    with _LOCK:
+        data = load()
+        settings = data.setdefault("settings", {})
+        if personal_time:
+            settings["personal_schedule_time"] = str(personal_time).strip()
+        if team_time:
+            settings["team_schedule_time"] = str(team_time).strip()
+        save(data)
+        return {
+            "personal_time": settings.get("personal_schedule_time", "11:30"),
+            "team_time": settings.get("team_schedule_time", "12:00"),
+            "timezone": "Asia/Yekaterinburg",
+        }
+
+
+def list_all_users() -> list[dict[str, Any]]:
+    with _LOCK:
+        data = load()
+        res = []
+        for chat_id, u in data.get("users", {}).items():
+            res.append(
+                {
+                    "chat_id": chat_id,
+                    "role": u.get("role", "user"),
+                    "authorized": bool(u.get("authorized")),
+                    "jira_account_id": u.get("jira_account_id"),
+                    "jira_display_name": u.get("jira_display_name"),
+                    "notify": u.get("notify", True),
+                    "andrey_mode": bool(u.get("andrey_mode")),
+                    "can_create_team": bool(u.get("can_create_team")),
+                    "invite_label": u.get("invite_label"),
+                }
+            )
+        return res
+
+
+def list_all_invites() -> list[dict[str, Any]]:
+    with _LOCK:
+        data = load()
+        res = []
+        for token, inv in data.get("invites", {}).items():
+            res.append(
+                {
+                    "token": token,
+                    "label": inv.get("label"),
+                    "created_by": inv.get("created_by"),
+                    "created_at": inv.get("created_at"),
+                    "used_by": inv.get("used_by"),
+                    "used_at": inv.get("used_at"),
+                    "is_used": bool(inv.get("used_by")),
+                    "link": f"https://t.me/jirasumbot?start=inv_{token}",
+                }
+            )
+        return res
+
