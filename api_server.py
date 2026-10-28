@@ -10,7 +10,7 @@ import time
 from datetime import date, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import report
 import store
@@ -339,7 +339,7 @@ class WebAppApiHandler(BaseHTTPRequestHandler):
             parts = path.split("/")
             # /api/teams/<id>/members
             if len(parts) == 5:
-                team_id = parts[3]
+                team_id = unquote(parts[3])
                 aid = (body.get("jira_account_id") or "").strip()
                 name = (body.get("jira_display_name") or "").strip()
                 if not aid or not name:
@@ -357,7 +357,7 @@ class WebAppApiHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/teams/") and path.endswith("/send"):
             parts = path.split("/")
             if len(parts) == 5:
-                team_id = parts[3]
+                team_id = unquote(parts[3])
                 team = store.get_team(team_id)
                 if not team:
                     _send_error(self, "Команда не найдена", status=404)
@@ -410,8 +410,8 @@ class WebAppApiHandler(BaseHTTPRequestHandler):
             parts = path.split("/")
             # /api/teams/<team_id>/members/<account_id>
             if len(parts) == 6:
-                team_id = parts[3]
-                account_id = parts[5]
+                team_id = unquote(parts[3])
+                account_id = unquote(parts[5])
                 ok, msg, team = store.remove_team_member(team_id, account_id)
                 if not ok:
                     _send_error(self, msg)
@@ -424,7 +424,7 @@ class WebAppApiHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/teams/"):
             parts = path.split("/")
             if len(parts) == 4:
-                team_id = parts[3]
+                team_id = unquote(parts[3])
                 tg_id = self._get_tg_id(query)
                 ok, msg = store.delete_team(team_id, tg_id)
                 if not ok and not store.is_admin(tg_id):

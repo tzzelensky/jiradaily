@@ -8,6 +8,7 @@ __pycache__/
 deploy_vps.py
 users.json
 users.tmp
+webapp/node_modules
 webapp/node_modules/
 webapp/dist/
 

@@ -27,7 +27,7 @@ interface SumTabProps {
 
 export const SumTab: React.FC<SumTabProps> = ({ onNotify }) => {
   const [selectedDate, setSelectedDate] = useState<string>(() => {
-    return new Date().toISOString().split('T')[0];
+    return new Date().toLocaleDateString('en-CA');
   });
   const [loading, setLoading] = useState<boolean>(false);
   const [sending, setSending] = useState<boolean>(false);
@@ -85,7 +85,7 @@ export const SumTab: React.FC<SumTabProps> = ({ onNotify }) => {
   const getPresetDate = (daysAgo: number) => {
     const d = new Date();
     d.setDate(d.getDate() - daysAgo);
-    return d.toISOString().split('T')[0];
+    return d.toLocaleDateString('en-CA');
   };
 
   return (

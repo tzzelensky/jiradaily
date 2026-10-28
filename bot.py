@@ -52,6 +52,8 @@ def reply_markup(chat_id: str, text: str, keyboard: list[list[dict]]) -> None:
 
 
 def team_help_block() -> str:
+    cfg = store.get_schedule_config()
+    team_t = cfg.get("team_time", "12:00")
     return (
         "<b>Команды (teams)</b>\n"
         "/create_team \"Название\" — создать команду\n"
@@ -59,13 +61,16 @@ def team_help_block() -> str:
         "/sum_team — отчёт по команде (today / yesterday / дата)\n"
         "/list_teams — список ваших команд\n"
         "/delete_team — удалить команду\n"
-        "/team_notify on — включить автоотчёт команды (12:00 ЕКБ)\n"
+        f"/team_notify on — включить автоотчёт команды ({team_t} ЕКБ)\n"
         "/team_notify off — выключить автоотчёт команды\n"
-        "Автоотчёт команды: Пн–Пт в 12:00 ЕКБ (если не выключен)"
+        f"Автоотчёт команды: Пн–Пт в {team_t} ЕКБ (если не выключен)"
     )
 
 
 def help_text(chat_id: str) -> str:
+    cfg = store.get_schedule_config()
+    p_t = cfg.get("personal_time", "11:30")
+    t_t = cfg.get("team_time", "12:00")
     lines = [
         "<b>Команды</b>",
         "/sum — отчёт за предыдущий рабочий день",
@@ -75,7 +80,7 @@ def help_text(chat_id: str) -> str:
         "/sum_user Имя — отчёт по любому Jira-юзеру (по умолчанию вчера)",
         "/sum_user \"Имя\" today — за сегодня",
         "/changename — сменить Jira-пользователя для статистики",
-        "/notify on — включить личный автоотчёт (11:30 ЕКБ)",
+        f"/notify on — включить личный автоотчёт ({p_t} ЕКБ)",
         "/notify off — выключить личный автоотчёт",
         "/help — этот список",
         "/start — статус / начать привязку",
@@ -102,7 +107,7 @@ def help_text(chat_id: str) -> str:
                 f"Сейчас смотришь: <b>{report.html_escape(u['jira_display_name'])}</b>",
             ]
         )
-    lines.append("\nАвтоотчёт: Пн–Пт в 11:30 ЕКБ (личный), 12:00 ЕКБ (команды).")
+    lines.append(f"\nАвтоотчёт: Пн–Пт в {p_t} ЕКБ (личный), {t_t} ЕКБ (команды).")
     return "\n".join(lines)
 
 
@@ -701,10 +706,12 @@ def handle_notify(chat_id: str, args: list[str]) -> None:
         reply(chat_id, "Формат: <code>/notify on</code> или <code>/notify off</code>")
         return
     store.set_personal_notify(chat_id, enabled)
+    cfg = store.get_schedule_config()
+    p_t = cfg.get("personal_time", "11:30")
     if enabled:
-        reply(chat_id, "Личный автоотчёт (11:30 ЕКБ): <b>вкл</b>")
+        reply(chat_id, f"Личный автоотчёт ({p_t} ЕКБ): <b>вкл</b>")
     else:
-        reply(chat_id, "Личный автоотчёт (11:30 ЕКБ): <b>выкл</b>")
+        reply(chat_id, f"Личный автоотчёт ({p_t} ЕКБ): <b>выкл</b>")
 
 
 def apply_team_notify(chat_id: str, team_id: str, enabled: bool) -> None:
@@ -712,10 +719,12 @@ def apply_team_notify(chat_id: str, team_id: str, enabled: bool) -> None:
     if not ok:
         reply(chat_id, f"❌ {report.html_escape(name)}")
         return
+    cfg = store.get_schedule_config()
+    t_t = cfg.get("team_time", "12:00")
     state = "вкл" if enabled else "выкл"
     reply(
         chat_id,
-        f"Автоотчёт команды <b>{report.html_escape(name)}</b> (12:00 ЕКБ): <b>{state}</b>",
+        f"Автоотчёт команды <b>{report.html_escape(name)}</b> ({t_t} ЕКБ): <b>{state}</b>",
     )
 
 
